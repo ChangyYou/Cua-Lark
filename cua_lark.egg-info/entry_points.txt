@@ -1,0 +1,2 @@
+[console_scripts]
+cua-lark = src.core.cli:main
