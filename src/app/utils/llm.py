@@ -10,6 +10,8 @@ from typing import Any
 
 from dashscope import MultiModalConversation
 
+from app.config import config
+
 
 def _get_attr_or_key(obj: Any, name: str, default: Any = None) -> Any:
     """Read value from both dict-style and object-style SDK payloads."""
@@ -34,10 +36,12 @@ def _extract_text_content(response: Any) -> str:
 def call_llm_with_image(
     prompt: str,
     image_path: str,
-    model: str = "qwen3-vl-flash",
-    temperature: float = 0.2,
+    model: str | None = None,
+    temperature: float | None = None,
 ) -> str:
     """Call multimodal model with one screenshot and one text prompt."""
+    model = model or config.model_image
+    temperature = temperature if temperature is not None else config.model_temperature
     absolute_image_path = os.path.abspath(image_path)
     messages = [
         {
@@ -70,10 +74,12 @@ def call_llm_with_image_and_tools(
     prompt: str,
     image_path: str,
     tools: list[dict[str, Any]],
-    model: str = "qwen-vl-max",
-    temperature: float = 0.2,
+    model: str | None = None,
+    temperature: float | None = None,
 ) -> dict[str, Any] | None:
     """Call multimodal model with function tools and return first tool call."""
+    model = model or config.model_tools
+    temperature = temperature if temperature is not None else config.model_temperature
     absolute_image_path = os.path.abspath(image_path)
     messages = [
         {
@@ -130,10 +136,12 @@ def call_llm_with_image_and_tools(
 def call_llm_with_text_and_tools(
     prompt: str,
     tools: list[dict[str, Any]],
-    model: str = "qwen-vl-max",
-    temperature: float = 0.0,
+    model: str | None = None,
+    temperature: float | None = None,
 ) -> dict[str, Any] | None:
     """Call model with text-only prompt and function tools."""
+    model = model or config.model_tools
+    temperature = temperature if temperature is not None else config.model_temperature
     messages = [
         {
             "role": "user",
