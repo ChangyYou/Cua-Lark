@@ -16,6 +16,7 @@ class Config:
 
     # API Configuration
     dashscope_api_key: str = os.getenv("DASHSCOPE_API_KEY", "")
+    dashscope_base_url: str = os.getenv("DASHSCOPE_BASE_URL", "")
 
     # Model Configuration
     model_image: str = os.getenv("MODEL_IMAGE", "qwen3-vl-flash")

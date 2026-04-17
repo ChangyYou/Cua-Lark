@@ -8,9 +8,17 @@ import json
 import os
 from typing import Any
 
+import dashscope
 from dashscope import MultiModalConversation
 
 from app.config import config
+
+
+def _setup_dashscope() -> None:
+    """Configure DashScope SDK with API key and base URL."""
+    dashscope.api_key = config.dashscope_api_key
+    if config.dashscope_base_url:
+        dashscope.base_url = config.dashscope_base_url
 
 
 def _get_attr_or_key(obj: Any, name: str, default: Any = None) -> Any:
@@ -40,6 +48,7 @@ def call_llm_with_image(
     temperature: float | None = None,
 ) -> str:
     """Call multimodal model with one screenshot and one text prompt."""
+    _setup_dashscope()
     model = model or config.model_image
     temperature = temperature if temperature is not None else config.model_temperature
     absolute_image_path = os.path.abspath(image_path)
@@ -78,6 +87,7 @@ def call_llm_with_image_and_tools(
     temperature: float | None = None,
 ) -> dict[str, Any] | None:
     """Call multimodal model with function tools and return first tool call."""
+    _setup_dashscope()
     model = model or config.model_tools
     temperature = temperature if temperature is not None else config.model_temperature
     absolute_image_path = os.path.abspath(image_path)
@@ -140,6 +150,7 @@ def call_llm_with_text_and_tools(
     temperature: float | None = None,
 ) -> dict[str, Any] | None:
     """Call model with text-only prompt and function tools."""
+    _setup_dashscope()
     model = model or config.model_tools
     temperature = temperature if temperature is not None else config.model_temperature
     messages = [

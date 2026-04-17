@@ -25,8 +25,13 @@ python src/app/agent.py
 在 `.env` 文件中配置：
 
 ```bash
-MODEL_IMAGE=qwen3-vl-flash      # 图像理解模型
-MODEL_TOOLS=qwen-vl-max         # 工具调用模型
+# API 配置
+DASHSCOPE_API_KEY=your_api_key_here
+DASHSCOPE_BASE_URL=https://dashscope.aliyuncs.com/compatible-mode/v1
+
+# 模型配置
+MODEL_IMAGE=qwen3-vl-flash      # 图像理解模型（规划阶段）
+MODEL_TOOLS=qwen-vl-max         # 工具调用模型（ReAct 阶段）
 MODEL_TEMPERATURE=0.2           # 温度参数
 ```
 

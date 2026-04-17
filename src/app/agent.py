@@ -9,7 +9,6 @@ import os
 import time
 from datetime import datetime
 
-import dashscope
 from dotenv import load_dotenv
 
 from app.skills import AgentSkill, build_skill_by_name, select_skill, skill_catalog_text
@@ -40,7 +39,6 @@ from platforms import (
 
 # Load environment variables before configuring SDK clients.
 load_dotenv()
-dashscope.api_key = os.getenv("DASHSCOPE_API_KEY")
 
 MAX_PLAN_STEPS = 20
 MAX_REACT_STEPS = 25

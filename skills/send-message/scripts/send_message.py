@@ -1,7 +1,7 @@
 """
 Send-message skill runtime adapter.
 
-Loads codex-style SKILL.md metadata and injects skill content into prompts.
+This is the canonical runtime script for the send-message skill.
 """
 
 from __future__ import annotations
@@ -10,7 +10,7 @@ from dataclasses import dataclass
 from pathlib import Path
 import re
 
-SKILL_DIR = Path(__file__).resolve().parents[3] / "skills" / "send-message"
+SKILL_DIR = Path(__file__).resolve().parents[1]
 SKILL_MD = SKILL_DIR / "SKILL.md"
 
 DEFAULT_NAME = "send-message"
@@ -104,11 +104,7 @@ def match_send_intent(user_command: str) -> dict[str, str] | None:
 
 @dataclass
 class SendMessageSkill:
-    """
-    Prompt-driven skill object.
-
-    Prompt + gate hybrid skill to reduce wrong-contact sends.
-    """
+    """Prompt + gate hybrid skill to reduce wrong-contact sends."""
 
     recipient: str
     message: str
@@ -184,9 +180,7 @@ class SendMessageSkill:
         return key in ("command+k", "cmd+k", "ctrl+k", "control+k")
 
     def enforce_action(self, action: dict[str, object]) -> dict[str, object]:
-        """
-        Enforce minimal reliable sequence for send-message.
-        """
+        """Enforce minimal reliable sequence for send-message."""
         action_type = str(action.get("action", "")).lower().strip()
 
         if self.stage == STAGE_OPEN_SEARCH:
@@ -218,9 +212,6 @@ class SendMessageSkill:
                 grid = int(action.get("grid", 0))
             except (TypeError, ValueError):
                 grid = 0
-            # In 6x6 layouts, the first contact row is usually in upper rows.
-            # When the model keeps choosing lower rows (e.g. group chats),
-            # force a couple of retries before accepting lower positions.
             if grid > 12 and self.contact_click_retry < 2:
                 self.contact_click_retry += 1
                 print("技能门控(send-message)：联系人点击位置偏低，优先点击搜索结果上方第一条精确联系人。")
@@ -306,3 +297,4 @@ __all__ = [
     "SendMessageSkill",
     "describe_send_message_skill",
 ]
+
