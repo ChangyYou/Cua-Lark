@@ -186,11 +186,12 @@ pyautogui.hotkey('Cmd+V')  /  pyautogui.hotkey('Ctrl+V')
 ### 1.7 技术栈
 
 | 层次 | 技术选型 | 选型理由 |
-|------|----------|----------|
-| 视觉推理 | OpenAI GPT-4o Vision API | 业界领先的多模态模型，支持图像输入 |
+|------|----------|----------|----------|
+| 视觉推理 | Qwen-VL-Max (阿里云百炼) | 多模态模型，支持图像输入和推理 |
 | 屏幕截取 | mss | 高性能跨平台截屏库 |
 | 图像处理 | Pillow | 叠加网格标记 |
-| 键鼠控制 | PyAutoGUI | 跨平台鼠标键盘模拟 |
+| 键鼠控制 (Windows) | PyAutoGUI + pywin32 | 鼠标键盘模拟 + 窗口管理 |
+| 键鼠控制 (macOS) | Quartz + pyobjc | 原生 macOS API |
 | 中文输入 | pyperclip | 剪贴板操作，解决中文输入问题 |
 | OCR 辅助 | EasyOCR / PaddleOCR | 可选的文字识别辅助定位 |
 | 数据持久化 | SQLite | 长期记忆和知识库存储 |
@@ -206,67 +207,94 @@ pyautogui.hotkey('Cmd+V')  /  pyautogui.hotkey('Ctrl+V')
 CUA-Lark/
 │
 ├── src/
-│   ├── core/                    # 核心：主循环、调度
-│   ├── perception/              # 感知：截屏、网格、OCR
-│   ├── reasoning/               # 推理：调用大模型、任务规划
-│   ├── execution/               # 执行：点击、输入、快捷键
-│   ├── validation/              # 验证：结果判断、重试
-│   ├── memory/                  # 记忆：短期、长期
-│   ├── knowledge/               # 知识库：飞书界面、操作路径
-│   └── safety/                  # 安全：危险检测、确认机制
-│
-├── plugins/                     # 飞书功能模块（一个模块一个目录）
-│   ├── messaging/               # 即时通讯
-│   ├── calendar/                # 日历
-│   ├── docs/                    # 文档
-│   ├── approval/                # 审批
-│   └── bitable/                 # 多维表格
-│
-├── config/                      # 配置
-├── tests/                       # 测试
-├── benchmarks/                  # 评测
-├── examples/                    # 示例
-├── assets/                      # 资源
-├── docs/                        # 文档
+│   ├── app/                     # 应用层：agent 主循环、CLI 入口
+│   └── platforms/               # 平台适配层
+│       ├── common/              # 跨平台共享逻辑：网格、截图叠加
+│       ├── windows/             # Windows 专属实现：截屏、点击、输入、快捷键
+│       └── macos/               # macOS 专属实现：截屏、点击、输入、快捷键
 │
 ├── .env                         # 环境变量
 ├── requirements.txt
+├── requirements-macos.txt
+├── environment.yml
 ├── pyproject.toml
 ├── Makefile
+├── captures/                    # 调试截图与运行结果
 ├── LICENSE
 └── README.md
+```
 
+### 当前分层说明
+
+- `app/` 只负责任务编排，不直接写平台判断逻辑。
+- `platforms/common/` 放所有跨平台可复用的能力，避免 macOS 和 Windows 重复实现同一套网格换算与叠图逻辑。
+- `platforms/windows/` 与 `platforms/macos/` 各自封装系统 API，后续如果某些能力继续分叉，目录会自然承接。
 
 ### 模块间依赖关系
 
 ```
-main.py
+python cua-lark.py / cua-lark CLI
   │
   ▼
-agent.py
+app/agent.py
   │
-  ├──► src/perception/    截屏 + 网格
+  ├──► platforms/__init__.py        当前操作系统选择器
   │         │
-  │         ▼
-  ├──► src/reasoning/     推理 + 规划
-  │         │
-  │         ▼
-  ├──► src/execution/     执行动作
-  │         │
-  │         ▼
-  ├──► src/validation/    验证结果
-  │         │
-  │         ▼
-  ├──► src/memory/        记录操作历史
+  │         ├──► platforms/windows/ Windows 实现
+  │         └──► platforms/macos/   macOS 实现
   │
-  ├──► plugins/           加载当前任务对应的插件
-  │
-  ├──► src/safety/        危险操作拦截
-  │
-  └──► config/            读取配置
+  └──► platforms/common/            共享网格与截图辅助逻辑
 ```
 
-运行效果
+---
+
+## 三、安装与运行
+
+### 3.1 Windows 系统
+
+```bash
+# 1. 创建 conda 环境
+conda env create -f environment.yml
+conda activate cua-lark
+
+# 2. 配置 API Key（编辑 .env 文件）
+DASHSCOPE_API_KEY=your_api_key_here
+
+# 3. 运行
+python cua-lark.py 帮我给游畅发送你好
+```
+
+### 3.2 macOS 系统
+
+```bash
+# 1. 创建 conda 环境
+conda env create -f environment.yml
+conda activate cua-lark
+
+# 2. 配置 API Key（编辑 .env 文件）
+DASHSCOPE_API_KEY=your_api_key_here
+
+# 3. 运行（统一入口，自动识别 macOS）
+python cua-lark.py 帮我给游畅发送你好
+```
+
+**macOS 权限说明：**
+需要在 `系统设置 > 隐私与安全性` 中授予以下权限：
+- **辅助功能**：控制键盘和鼠标
+- **屏幕录制**：截取屏幕内容
+- **自动化**：控制其他应用
+
+### 3.3 依赖说明
+
+| 系统 | 依赖文件 |
+|------|----------|
+| Windows | `requirements.txt` |
+| macOS | `requirements-macos.txt` |
+
+---
+
+## 四、运行效果
+
 # 单条指令
 cua-lark "给王经理发消息说后端联调已经跑通了"
 

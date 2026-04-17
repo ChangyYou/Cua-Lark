@@ -1,4 +1,3 @@
-#!/usr/bin/env python
 """
 CUA-Lark 命令行入口
 
@@ -9,10 +8,15 @@ CUA-Lark 命令行入口
 import sys
 import os
 
-# 添加项目根目录到路径
-sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
+# Add the source directory so the package can be imported without installation.
+project_root = os.path.dirname(os.path.abspath(__file__))
+src_root = os.path.join(project_root, "src")
+if src_root not in sys.path:
+    sys.path.insert(0, src_root)
 
-from src.core.agent import run_agent
+from app.agent import run_agent
+
+
 
 if __name__ == "__main__":
     # 获取命令行参数（去掉脚本本身）
