@@ -31,7 +31,6 @@ from app.utils.tools import REACT_FUNCTION_TOOLS, SKILL_ROUTER_FUNCTION_TOOLS
 from platforms import (
     CURRENT_PLATFORM,
     capture_lark_window,
-    click_grid_bottom,
     input_message,
     open_search,
     press,
@@ -48,10 +47,26 @@ def capture_and_prepare(grid_size: int = 6, image_path: str | None = None) -> tu
     """Capture current Lark window and persist screenshot."""
     image, grid_info = capture_lark_window(grid_size=grid_size)
     if image_path is None:
-        image_path = "captures/agent_capture.png"
+        image_path = "captures/agent_capture.jpg"
+    
+    # Convert extension to .jpg if it's .png
+    if image_path.lower().endswith(".png"):
+        image_path = image_path[:-4] + ".jpg"
+        
     output_dir = os.path.dirname(image_path) or "."
     os.makedirs(output_dir, exist_ok=True)
-    image.save(image_path)
+    
+    # Compress image to speed up LLM API calls (avoids 300s timeout on slow network)
+    image = image.convert("RGB")
+    max_dim = 1920  # 提高到 1920，确保 1080P 屏幕截图完全不缩放分辨率
+    if image.width > max_dim or image.height > max_dim:
+        ratio = min(max_dim / image.width, max_dim / image.height)
+        new_size = (int(image.width * ratio), int(image.height * ratio))
+        # Use LANCZOS for high-quality downsampling
+        from PIL import Image
+        image = image.resize(new_size, Image.Resampling.LANCZOS)
+        
+    image.save(image_path, format="JPEG", quality=90)  # 提升画质到 90，减少 JPEG 伪影
     return image_path, grid_info
 
 
@@ -105,15 +120,30 @@ def execute_action(action: dict, grid_info: dict) -> bool:
             input_message(str(action.get("text", "")))
             return True
 
-        if action_type == "click_grid":
-            if "grid" not in action:
-                print("  缺少 grid 参数，跳过点击。")
-                return False
-            click_grid_bottom(
-                int(action["grid"]),
-                grid_info,
-                float(action.get("offset_ratio", 0.5)),
-            )
+        if action_type == "paste_content":
+            from platforms import paste_text
+            hwnd = grid_info.get("window_info", {}).get("hwnd")
+            paste_text(str(action.get("text", "")), hwnd=hwnd)
+            return True
+
+        if action_type == "click_position":
+            x_ratio = float(action.get("x_ratio", 0.5))
+            y_ratio = float(action.get("y_ratio", 0.5))
+            
+            window_info = grid_info.get("window_info")
+            if window_info:
+                # 相对窗口的坐标
+                abs_x = int(window_info["left"] + x_ratio * window_info["width"])
+                abs_y = int(window_info["top"] + y_ratio * window_info["height"])
+                hwnd = window_info.get("hwnd")
+            else:
+                # 相对整个屏幕（或截图）的坐标
+                abs_x = int(x_ratio * grid_info.get("image_width", 1920))
+                abs_y = int(y_ratio * grid_info.get("image_height", 1080))
+                hwnd = None
+                
+            from platforms import click_at
+            click_at(abs_x, abs_y, hwnd)
             return True
 
         if action_type == "press_key":
@@ -123,6 +153,13 @@ def execute_action(action: dict, grid_info: dict) -> bool:
                 open_search(window_info)
             else:
                 press(key)
+            return True
+
+        if action_type == "scroll":
+            from platforms import scroll
+            hwnd = grid_info.get("window_info", {}).get("hwnd")
+            amount = int(action.get("amount", -500))
+            scroll(amount, hwnd=hwnd) if hasattr(scroll, "__code__") and "hwnd" in scroll.__code__.co_varnames else scroll(amount)
             return True
 
         if action_type == "wait":
@@ -217,6 +254,8 @@ def run_agent(user_command: str, grid_size: int = 6, debug: bool = False) -> Non
             skill_catalog=skill_catalog,
             skill_guidance=active_skill.react_guidance() if active_skill else "",
         )
+        
+        print("  正在调用大模型进行视觉决策，请稍候...")
         tool_call = call_llm_with_image_and_tools(
             prompt=react_prompt,
             image_path=image_path,
