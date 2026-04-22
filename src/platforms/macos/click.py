@@ -6,7 +6,6 @@ import time
 
 import Quartz
 
-from platforms.common.grid import grid_to_absolute_coordinates
 from platforms.macos.screen import ScreenCapture
 
 
@@ -43,34 +42,23 @@ def click_at(x: int, y: int) -> None:
     print(f"点击坐标：({x}, {macos_y})")
 
 
-def click_grid(grid_number: int, grid_info: dict) -> None:
-    """Click the center of a grid cell."""
-    x, y = grid_to_absolute_coordinates(grid_number, grid_info)
-    click_at(x, y)
-
-
-def click_and_wait(grid_number: int, grid_info: dict, wait: float = 1.0) -> None:
-    """Click a grid cell and wait for the UI to respond."""
-    click_grid(grid_number, grid_info)
-    time.sleep(wait)
-
-
-def click_grid_bottom(grid_number: int, grid_info: dict, offset_ratio: float = 0.8) -> None:
-    """Click near the bottom area of a grid cell."""
-    x, y = grid_to_absolute_coordinates(grid_number, grid_info, offset_ratio=offset_ratio)
-    click_at(x, y)
+def scroll(amount: int) -> None:
+    """Scroll the mouse wheel. Positive amount scrolls up, negative scrolls down."""
+    # amount unit for Quartz is line. -1 is down, 1 is up. We normalize arbitrary amount.
+    lines = amount // 100 if amount != 0 else 0
+    if lines == 0 and amount != 0:
+        lines = 1 if amount > 0 else -1
+        
+    scroll_event = Quartz.CGEventCreateScrollWheelEvent(
+        None,
+        Quartz.kCGScrollEventUnitLine,
+        1, # number of wheels
+        lines
+    )
+    Quartz.CGEventPost(Quartz.kCGHIDEventTap, scroll_event)
+    print(f"滚动鼠标：{lines} lines")
 
 
 if __name__ == "__main__":
-    print("截取飞书窗口...")
-    capture = ScreenCapture(grid_size=6)
-    image, grid_info = capture.capture_with_grid()
-    image.save("captures/test_click_macos.png")
-
-    print(f"截图尺寸：{grid_info['image_width']}x{grid_info['image_height']}")
-    print(f"网格大小：{grid_info['grid_size']}x{grid_info['grid_size']}")
-
-    print("2 秒后开始点击网格 23...")
-    time.sleep(2)
-    click_grid(23, grid_info)
+    pass
 

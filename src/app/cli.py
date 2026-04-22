@@ -22,7 +22,7 @@ def main() -> None:
         "--grid-size",
         "-g",
         type=int,
-        default=6,
+        default=10,
         help="网格大小（默认 6x6）",
     )
     parser.add_argument(

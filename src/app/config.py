@@ -20,7 +20,7 @@ class Config:
 
     # Model Configuration
     model_image: str = os.getenv("MODEL_IMAGE", "qwen3-vl-flash")
-    model_tools: str = os.getenv("MODEL_TOOLS", "qwen-vl-max")
+    model_tools: str = os.getenv("MODEL_TOOLS", "qwen3.6-plus")
     model_temperature: float = float(os.getenv("MODEL_TEMPERATURE", "0.2"))
 
     # Logging

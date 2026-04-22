@@ -45,7 +45,7 @@ def normalize_action(action: dict[str, Any] | None) -> dict[str, Any]:
 
     action_type = str(action.get("action", "")).strip().lower()
     alias_map = {
-        "click": "click_grid",
+        "click": "click_position",
         "type": "input_text",
         "paste": "input_text",
         "press": "press_key",
@@ -55,24 +55,20 @@ def normalize_action(action: dict[str, Any] | None) -> dict[str, Any]:
     normalized = dict(action)
     normalized["action"] = action_type
 
-    if action_type == "click_grid":
+    if action_type == "click_position":
         try:
-            grid = int(normalized.get("grid"))
+            x_ratio = float(normalized.get("x_ratio", 0.5))
+            y_ratio = float(normalized.get("y_ratio", 0.5))
+            normalized["x_ratio"] = max(0.0, min(1.0, x_ratio))
+            normalized["y_ratio"] = max(0.0, min(1.0, y_ratio))
         except (TypeError, ValueError):
             return {
                 "action": "wait",
                 "seconds": 0.8,
-                "reason": "兜底：click_grid 缺少有效 grid，等待下一轮重新定位",
+                "reason": "兜底：click_position 缺少有效坐标，等待下一轮重新定位",
             }
-        if grid < 1:
-            return {
-                "action": "wait",
-                "seconds": 0.8,
-                "reason": "兜底：click_grid 的 grid 非法，等待下一轮重新定位",
-            }
-        normalized["grid"] = grid
-        normalized.setdefault("offset_ratio", 0.5)
-    elif action_type == "wait":
+
+    if action_type == "wait":
         try:
             seconds = float(normalized.get("seconds", 1))
         except (TypeError, ValueError):
@@ -96,13 +92,13 @@ def action_from_tool_call(tool_call: dict[str, Any] | None) -> dict[str, Any]:
     arguments = tool_call.get("arguments", {}) or {}
     reason = str(arguments.get("reason", "")).strip()
 
-    if name == "click_region":
+    if name == "click_position":
         return normalize_action(
             {
-                "action": "click_grid",
-                "grid": arguments.get("grid"),
-                "offset_ratio": arguments.get("offset_ratio", 0.5),
-                "reason": reason or "函数调用：点击区域",
+                "action": "click_position",
+                "x_ratio": arguments.get("x_ratio"),
+                "y_ratio": arguments.get("y_ratio"),
+                "reason": reason or "函数调用：原生坐标点击",
             }
         )
 
@@ -121,6 +117,23 @@ def action_from_tool_call(tool_call: dict[str, Any] | None) -> dict[str, Any]:
                 "action": "input_text",
                 "text": str(arguments.get("text", "")),
                 "reason": reason or "函数调用：粘贴内容",
+            }
+        )
+
+    if name == "scroll":
+        return normalize_action(
+            {
+                "action": "scroll",
+                "amount": int(arguments.get("amount", -500)),
+                "reason": reason or "函数调用：滚动屏幕",
+            }
+        )
+
+    if name == "done":
+        return normalize_action(
+            {
+                "action": "done",
+                "reason": reason or "函数调用：任务完成",
             }
         )
 
@@ -146,8 +159,8 @@ def format_action_brief(action: dict[str, Any]) -> str:
     action_type = str(action.get("action", "unknown"))
     if action_type == "wait":
         return f"wait({action.get('seconds', 1)}s)"
-    if action_type == "click_grid":
-        return f"click_grid({action.get('grid', '?')})"
+    if action_type == "click_position":
+        return f"click_position(x={action.get('x_ratio', '?'):.3f}, y={action.get('y_ratio', '?'):.3f})"
     if action_type == "input_text":
         text = str(action.get("text", ""))
         if len(text) > 14:

@@ -6,8 +6,7 @@ import mss
 import win32gui
 from PIL import Image
 
-from platforms.common.grid import grid_to_absolute_coordinates
-from platforms.common.screen import add_grid_overlay, build_grid_info
+from platforms.common.screen import build_grid_info
 
 
 WINDOWS_FONT_CANDIDATES = [
@@ -25,10 +24,12 @@ class ScreenCapture:
         self._lark_hwnd = None
 
     def _enum_windows_callback(self, hwnd, window_list) -> None:
-        if win32gui.IsWindowVisible(hwnd):
-            title = win32gui.GetWindowText(hwnd)
-            if title:
-                window_list.append((hwnd, title))
+        title = win32gui.GetWindowText(hwnd)
+        # 为了避免把完全不可见的后台隐藏窗口（比如托盘后台进程）拉出来，
+        # 我们还是需要保证它至少有 WS_VISIBLE 属性，或者它被最小化了。
+        # 纯隐藏窗口（即没有显示过的）在 Windows 下很难被强行画出来。
+        if title and (win32gui.IsWindowVisible(hwnd) or win32gui.IsIconic(hwnd)):
+            window_list.append((hwnd, title))
 
     def list_all_windows(self) -> list:
         """List visible windows for debugging purposes."""
@@ -40,7 +41,55 @@ class ScreenCapture:
         """Find the current Lark desktop window."""
         window_list = []
         win32gui.EnumWindows(self._enum_windows_callback, window_list)
-        lark_windows = [(hwnd, title) for hwnd, title in window_list if "飞书" in title]
+        # 过滤掉常见的后台不可见窗口
+        lark_windows = []
+        for hwnd, title in window_list:
+            if "飞书" in title:
+                # GetWindowRect 如果返回 (0,0,0,0) 说明这是一个纯后台服务窗口，不能用来截图
+                rect = win32gui.GetWindowRect(hwnd)
+                if rect[2] - rect[0] > 0 and rect[3] - rect[1] > 0:
+                    lark_windows.append((hwnd, title))
+
+        # 如果还是找不到可见或最小化的飞书，尝试通过快捷方式拉起
+        if not lark_windows:
+            print("未找到任何飞书窗口！尝试从快捷方式拉起...")
+            import os
+            import time
+            
+            desktop_path = os.path.join(os.path.expanduser("~"), "Desktop")
+            public_desktop = r"C:\Users\Public\Desktop"
+            
+            shortcut_found = False
+            for d_path in [desktop_path, public_desktop]:
+                if os.path.exists(d_path):
+                    for f in os.listdir(d_path):
+                        if "飞书" in f and f.endswith(".lnk"):
+                            shortcut_path = os.path.join(d_path, f)
+                            print(f"找到桌面快捷方式: {shortcut_path}，正在拉起...")
+                            os.startfile(shortcut_path)
+                            shortcut_found = True
+                            break
+                if shortcut_found:
+                    break
+                    
+            if not shortcut_found:
+                print("未能找到飞书可执行文件或快捷方式，请手动打开飞书主界面！")
+            
+            # 给予充足的时间让它从后台加载 UI
+            time.sleep(3.0)
+            
+            # 重新扫描
+            fallback_list = []
+            win32gui.EnumWindows(self._enum_windows_callback, fallback_list)
+            for hwnd, title in fallback_list:
+                if "飞书" in title:
+                    class_name = win32gui.GetClassName(hwnd)
+                    if "Tray" in class_name or "Notify" in class_name:
+                        continue
+                    rect = win32gui.GetWindowRect(hwnd)
+                    if rect[2] - rect[0] > 100 and rect[3] - rect[1] > 100:
+                        lark_windows.append((hwnd, title))
+                        break
 
         if not lark_windows:
             print("未找到飞书窗口！当前部分窗口：")
@@ -58,6 +107,23 @@ class ScreenCapture:
             return self.window_info
 
         self._lark_hwnd, title = lark_windows[0]
+        
+        # 核心修复：唤醒后台或最小化的飞书进程
+        import win32con
+        
+        # 很多时候，即使用 SW_SHOW，窗口如果不处于激活状态，鼠标点击也会被吃掉
+        win32gui.ShowWindow(self._lark_hwnd, win32con.SW_SHOW)
+        
+        if win32gui.IsIconic(self._lark_hwnd):
+            win32gui.ShowWindow(self._lark_hwnd, win32con.SW_RESTORE)
+            
+        try:
+            # 强制挂载输入焦点，防止点击失效
+            win32gui.SetForegroundWindow(self._lark_hwnd)
+            win32gui.BringWindowToTop(self._lark_hwnd)
+        except Exception:
+            pass
+            
         print(f"找到飞书窗口: {title} (hwnd: {self._lark_hwnd})")
 
         left, top, right, bottom = win32gui.GetClientRect(self._lark_hwnd)
@@ -84,20 +150,15 @@ class ScreenCapture:
         screenshot = self.sct.grab(window_rect)
         return Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
 
-    def add_grid_overlay(self, image: Image.Image) -> Image.Image:
-        """Annotate the screenshot with a numeric grid."""
-        return add_grid_overlay(image, self.grid_size, WINDOWS_FONT_CANDIDATES)
+
 
     def capture_with_grid(self, window_rect: dict | None = None) -> tuple[Image.Image, dict]:
         """Capture a window and return the annotated image plus grid metadata."""
         image = self.capture_window(window_rect)
-        image_with_grid = self.add_grid_overlay(image)
         grid_info = build_grid_info(self.grid_size, image, self.window_info)
-        return image_with_grid, grid_info
+        return image, grid_info
 
-    def grid_to_coordinates(self, grid_number: int, grid_info: dict) -> tuple[int, int]:
-        """Return the absolute coordinates of the given grid cell center."""
-        return grid_to_absolute_coordinates(grid_number, grid_info, offset_ratio=0.5)
+
 
 
 def capture_lark_window(grid_size: int = 6) -> tuple[Image.Image, dict]:

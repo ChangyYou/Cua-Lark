@@ -7,8 +7,7 @@ import subprocess
 import mss
 from PIL import Image
 
-from platforms.common.grid import grid_to_absolute_coordinates
-from platforms.common.screen import add_grid_overlay, build_grid_info
+from platforms.common.screen import build_grid_info
 
 
 MACOS_FONT_CANDIDATES = [
@@ -130,20 +129,15 @@ class ScreenCapture:
         screenshot = self.sct.grab(window_rect)
         return Image.frombytes("RGB", screenshot.size, screenshot.bgra, "raw", "BGRX")
 
-    def add_grid_overlay(self, image: Image.Image) -> Image.Image:
-        """Annotate the screenshot with a numeric grid."""
-        return add_grid_overlay(image, self.grid_size, MACOS_FONT_CANDIDATES)
+
 
     def capture_with_grid(self, window_rect: dict | None = None) -> tuple[Image.Image, dict]:
         """Capture a window and return the annotated image plus grid metadata."""
         image = self.capture_window(window_rect)
-        image_with_grid = self.add_grid_overlay(image)
         grid_info = build_grid_info(self.grid_size, image, self.window_info)
-        return image_with_grid, grid_info
+        return image, grid_info
 
-    def grid_to_coordinates(self, grid_number: int, grid_info: dict) -> tuple[int, int]:
-        """Return the absolute coordinates of the given grid cell center."""
-        return grid_to_absolute_coordinates(grid_number, grid_info, offset_ratio=0.5)
+
 
 
 def capture_lark_window(grid_size: int = 6) -> tuple[Image.Image, dict]:
