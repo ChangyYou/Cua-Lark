@@ -8,11 +8,11 @@ import json
 from typing import Any
 
 
-def parse_plan(content: str) -> list[dict[str, Any]]:
-    """Parse a JSON action plan from model output."""
+def parse_plan(content: str) -> tuple[list[dict[str, Any]], str]:
+    """Parse a JSON action plan from model output. Returns (plan, error_msg)."""
     text = (content or "").strip()
     if not text:
-        return []
+        return [], "模型返回为空"
 
     if "```" in text:
         first = text.find("```")
@@ -25,17 +25,21 @@ def parse_plan(content: str) -> list[dict[str, Any]]:
     start = text.find("[")
     end = text.rfind("]")
     if start == -1 or end == -1 or end <= start:
-        return []
+        return [], "未找到 JSON 数组标记 '[' 和 ']'"
 
     try:
         parsed = json.loads(text[start : end + 1])
     except json.JSONDecodeError as exc:
-        print(f"计划解析失败: {exc}")
-        return []
+        return [], f"JSON 解析失败: {exc}"
 
     if not isinstance(parsed, list):
-        return []
-    return [item for item in parsed if isinstance(item, dict)]
+        return [], "解析结果不是一个列表"
+        
+    plan = [item for item in parsed if isinstance(item, dict)]
+    if not plan:
+        return [], "解析出的列表中没有有效的动作字典"
+        
+    return plan, ""
 
 
 def normalize_action(action: dict[str, Any] | None) -> dict[str, Any]:
@@ -187,5 +191,9 @@ def build_history_text(history: list[dict[str, Any]], max_items: int = 10) -> st
     lines = []
     for idx, item in enumerate(history[start:], start=start + 1):
         status = "成功" if item.get("success") else "失败"
-        lines.append(f"{idx}. {format_action_brief(item.get('action', {}))} [{status}]")
+        base_line = f"{idx}. {format_action_brief(item.get('action', {}))} [{status}]"
+        feedback = item.get("feedback")
+        if feedback:
+            base_line += f" - {feedback}"
+        lines.append(base_line)
     return "\n".join(lines)

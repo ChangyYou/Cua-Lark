@@ -6,12 +6,16 @@ from __future__ import annotations
 
 import json
 import os
+import re
 import time
 from datetime import datetime
 
 from dotenv import load_dotenv
 
 from app.skills import AgentSkill, build_skill_by_name, select_skill, skill_catalog_text
+
+# High-risk keywords for human-in-the-loop interception
+HIGH_RISK_KEYWORDS = re.compile(r"删除|清空|退出|解散")
 from app.utils.actions import (
     action_from_tool_call,
     build_history_text,
@@ -28,6 +32,8 @@ from app.utils.llm import (
 )
 from app.utils.prompts import build_plan_prompt, build_react_prompt, build_skill_router_prompt
 from app.utils.tools import REACT_FUNCTION_TOOLS, SKILL_ROUTER_FUNCTION_TOOLS
+from app.utils.memory import extract_and_store_memory, get_memory_guidance
+from app.utils.skill_generator import analyze_and_generate_skill
 from platforms import (
     CURRENT_PLATFORM,
     capture_lark_window,
@@ -184,6 +190,11 @@ def run_agent(user_command: str, grid_size: int = 6, debug: bool = False) -> Non
     print("CUA-Lark Agent 启动（先规划后 ReAct）")
     print(f"当前平台: {CURRENT_PLATFORM}")
     print(f"用户命令: {user_command}")
+    
+    is_task_high_risk = bool(HIGH_RISK_KEYWORDS.search(user_command))
+    if is_task_high_risk:
+        print("⚠️ 注意：该任务被标记为高危任务，关键操作将需要您的二次确认。")
+        
     if debug:
         print("调试模式: 开启")
     print("=" * 50)
@@ -202,6 +213,8 @@ def run_agent(user_command: str, grid_size: int = 6, debug: bool = False) -> Non
     os.makedirs(capture_dir, exist_ok=True)
     print(f"截图保存目录: {capture_dir}")
 
+    memory_guidance = get_memory_guidance()
+
     print("\n【步骤 1】观察当前界面并生成任务计划...")
     plan_observe_path = os.path.join(capture_dir, "plan-00-observe.png")
     image_path, grid_info = capture_and_prepare(grid_size=grid_size, image_path=plan_observe_path)
@@ -214,15 +227,16 @@ def run_agent(user_command: str, grid_size: int = 6, debug: bool = False) -> Non
         max_plan_steps=MAX_PLAN_STEPS,
         skill_catalog=skill_catalog,
         skill_guidance=active_skill.plan_guidance() if active_skill else "",
+        memory_guidance=memory_guidance,
     )
     plan_text = call_llm_with_image(plan_prompt, image_path)
     if debug:
         print("LLM 原始计划输出:")
         print(plan_text)
 
-    parsed_plan = parse_plan(plan_text)
+    parsed_plan, error_msg = parse_plan(plan_text)
     if not parsed_plan:
-        print("计划生成失败，回退到最小兜底计划。")
+        print(f"计划生成失败（失败原因: {error_msg}），回退到最小兜底计划。")
         parsed_plan = [{"action": "wait", "seconds": 1, "reason": "兜底等待"}, {"action": "done"}]
     plan = normalize_plan(parsed_plan, max_plan_steps=MAX_PLAN_STEPS)
 
@@ -253,6 +267,7 @@ def run_agent(user_command: str, grid_size: int = 6, debug: bool = False) -> Non
             cell_height=float(latest_grid_info.get("cell_height", 0.0)),
             skill_catalog=skill_catalog,
             skill_guidance=active_skill.react_guidance() if active_skill else "",
+            memory_guidance=memory_guidance,
         )
         
         print("  正在调用大模型进行视觉决策，请稍候...")
@@ -280,6 +295,31 @@ def run_agent(user_command: str, grid_size: int = 6, debug: bool = False) -> Non
             finished = True
             break
 
+        # 高危操作拦截 (Human-in-the-loop)
+        action_reason = str(action.get("reason", ""))
+        action_is_high_risk = is_task_high_risk or bool(HIGH_RISK_KEYWORDS.search(action_reason))
+        
+        if action_is_high_risk and action_type in ("click_position", "input_text", "press_key", "paste_content"):
+            if action_type == "click_position":
+                target_info = f"目标坐标：({action.get('x_ratio', 0):.3f}, {action.get('y_ratio', 0):.3f})"
+            else:
+                target_info = f"目标动作：{format_action_brief(action)}"
+                
+            print(f"\n⚠️ 警告：Agent 正在尝试执行 高危 操作。{target_info}")
+            print(f"操作意图: {action_reason}")
+            user_choice = input("是否允许继续？(y/n) [默认 n]: ").strip().lower()
+            if user_choice != 'y':
+                print("🚫 用户拒绝了该操作。")
+                history.append({
+                    "action": action, 
+                    "success": False, 
+                    "feedback": "用户拒绝了该操作"
+                })
+                if active_skill:
+                    active_skill.on_action_result(action, False)
+                print("  执行失败（被用户拦截），进入下一轮重新决策。")
+                continue
+
         success = execute_action(action, latest_grid_info)
         history.append({"action": action, "success": success})
         if active_skill:
@@ -296,6 +336,14 @@ def run_agent(user_command: str, grid_size: int = 6, debug: bool = False) -> Non
         print(f"达到最大 ReAct 轮次 {MAX_REACT_STEPS}，执行结束。")
     print("=" * 50)
 
+    # 提取长期记忆
+    if history:
+        history_text = build_history_text(history)
+        extract_and_store_memory(user_command, history_text, finished)
+        
+        # 如果是通用执行且执行成功，尝试固化为新技能
+        if active_skill is None and finished:
+            analyze_and_generate_skill(user_command, history_text)
 
 if __name__ == "__main__":
     run_agent("")

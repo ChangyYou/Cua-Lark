@@ -39,6 +39,9 @@ class ScreenCapture:
 
     def find_lark_window(self) -> dict | None:
         """Find the current Lark desktop window."""
+        import win32process
+        import win32con
+        
         window_list = []
         win32gui.EnumWindows(self._enum_windows_callback, window_list)
         # 过滤掉常见的后台不可见窗口
@@ -108,9 +111,27 @@ class ScreenCapture:
 
         self._lark_hwnd, title = lark_windows[0]
         
-        # 核心修复：唤醒后台或最小化的飞书进程
-        import win32con
+        # 方案一：根据主窗口PID查找同进程下的最顶层可见窗口（如预约会议弹窗）
+        _, pid = win32process.GetWindowThreadProcessId(self._lark_hwnd)
         
+        def find_top_window_for_pid(hwnd, top_windows):
+            if win32gui.IsWindowVisible(hwnd) and win32gui.GetWindowText(hwnd):
+                _, hwnd_pid = win32process.GetWindowThreadProcessId(hwnd)
+                if hwnd_pid == pid:
+                    # 过滤掉面积太小或者不可交互的窗口
+                    rect = win32gui.GetWindowRect(hwnd)
+                    if rect[2] - rect[0] > 100 and rect[3] - rect[1] > 100:
+                        top_windows.append(hwnd)
+        
+        pid_windows = []
+        win32gui.EnumWindows(find_top_window_for_pid, pid_windows)
+        
+        if pid_windows:
+            # EnumWindows 返回的列表默认是按 Z-order 从顶层到底层排列的
+            self._lark_hwnd = pid_windows[0]
+            title = win32gui.GetWindowText(self._lark_hwnd)
+        
+        # 核心修复：唤醒后台或最小化的飞书进程
         # 很多时候，即使用 SW_SHOW，窗口如果不处于激活状态，鼠标点击也会被吃掉
         win32gui.ShowWindow(self._lark_hwnd, win32con.SW_SHOW)
         
