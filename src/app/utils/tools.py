@@ -76,6 +76,28 @@ REACT_FUNCTION_TOOLS = [
     {
         "type": "function",
         "function": {
+            "name": "input_text",
+            "description": "向当前聚焦的输入框或文档输入纯文本。与 paste_content 作用相似，但在语义上更强调输入而非粘贴。",
+            "parameters": {
+                "type": "object",
+                "properties": {
+                    "text": {
+                        "type": "string",
+                        "description": "要输入的文本",
+                    },
+                    "reason": {
+                        "type": "string",
+                        "description": "为什么输入这段文本",
+                    },
+                },
+                "required": ["text"],
+                "additionalProperties": False,
+            },
+        },
+    },
+    {
+        "type": "function",
+        "function": {
             "name": "scroll",
             "description": "滚动鼠标滚轮。向下滚动查看更多内容使用负数（如 -500），向上滚动使用正数（如 500）。",
             "parameters": {

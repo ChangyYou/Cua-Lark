@@ -1,0 +1,6 @@
+test_suite: "Lark_Calendar_Scenarios"
+cases:
+  - id: "CAL_001"
+    name: "高优会议创建与冲突检测"
+    steps: "帮我在明天下午 14:00 到 15:00 创建一个名为 '架构重构评审' 的会议，并邀请张三"
+    assert_condition: "日历视图中，明天 14:00 的时间槽里出现了一个实体的色块，且标题清晰显示为'架构重构评审'"

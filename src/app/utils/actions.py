@@ -14,7 +14,9 @@ def parse_plan(content: str) -> tuple[list[dict[str, Any]], str]:
     if not text:
         return [], "模型返回为空"
 
+    # 处理 Markdown 代码块
     if "```" in text:
+        # 有时大模型返回多个代码块，或者只有一半
         first = text.find("```")
         last = text.rfind("```")
         if first != -1 and last != -1 and last > first:
@@ -22,15 +24,32 @@ def parse_plan(content: str) -> tuple[list[dict[str, Any]], str]:
             if text.startswith("json"):
                 text = text[4:].strip()
 
-    start = text.find("[")
-    end = text.rfind("]")
-    if start == -1 or end == -1 or end <= start:
-        return [], "未找到 JSON 数组标记 '[' 和 ']'"
+    # 使用正则强制提取被包围的 JSON 数组部分，处理前后附带大段文字的情况
+    import re
+    # 匹配最外层的 [] 
+    match = re.search(r"\[\s*\{.*\}\s*\]", text, re.DOTALL)
+    if match:
+        text = match.group(0)
+    else:
+        # 如果没有匹配到包含对象的数组，尝试简单提取
+        start = text.find("[")
+        end = text.rfind("]")
+        if start != -1 and end != -1 and end > start:
+            text = text[start : end + 1]
+        else:
+            return [], "未找到 JSON 数组标记 '[' 和 ']'"
 
     try:
-        parsed = json.loads(text[start : end + 1])
+        # Some LLMs might return truncated JSON arrays like `[{"action": "open_search"}, {"ac`
+        # Try to fix truncated JSON by finding the last valid object
+        if not text.rstrip().endswith("]"):
+            last_brace = text.rfind("}")
+            if last_brace != -1:
+                text = text[:last_brace+1] + "]"
+                
+        parsed = json.loads(text)
     except json.JSONDecodeError as exc:
-        return [], f"JSON 解析失败: {exc}"
+        return [], f"JSON 解析失败: {exc}\n原始文本片段: {text[:50]}..."
 
     if not isinstance(parsed, list):
         return [], "解析结果不是一个列表"
@@ -112,6 +131,15 @@ def action_from_tool_call(tool_call: dict[str, Any] | None) -> dict[str, Any]:
                 "action": "press_key",
                 "key": str(arguments.get("key", "")).strip(),
                 "reason": reason or "函数调用：按下按键",
+            }
+        )
+
+    if name == "input_text":
+        return normalize_action(
+            {
+                "action": "input_text",
+                "text": str(arguments.get("text", "")),
+                "reason": reason or "函数调用：输入文字",
             }
         )
 

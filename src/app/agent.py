@@ -157,6 +157,10 @@ def execute_action(action: dict, grid_info: dict) -> bool:
             if key in ("command+k", "cmd+k", "ctrl+k", "control+k"):
                 window_info = grid_info.get("window_info", {})
                 open_search(window_info)
+            elif "+" in key:
+                from platforms.windows.hotkey import hotkey
+                parts = [p.strip() for p in key.split("+") if p.strip()]
+                hotkey(*parts)
             else:
                 press(key)
             return True
@@ -184,7 +188,7 @@ def execute_action(action: dict, grid_info: dict) -> bool:
         return False
 
 
-def run_agent(user_command: str, grid_size: int = 6, debug: bool = False) -> None:
+def run_agent(user_command: str, grid_size: int = 6, debug: bool = False) -> tuple[bool, str]:
     """Run the agent in plan-then-react mode."""
     print("=" * 50)
     print("CUA-Lark Agent 启动（先规划后 ReAct）")
@@ -252,6 +256,7 @@ def run_agent(user_command: str, grid_size: int = 6, debug: bool = False) -> Non
     print("\n【步骤 2】ReAct 执行（每步基于最新截图决策）...")
     finished = False
     history: list[dict] = []
+
     for step_index in range(1, MAX_REACT_STEPS + 1):
         before_path = os.path.join(capture_dir, f"step-{step_index:02d}-observe.png")
         image_path, latest_grid_info = capture_and_prepare(grid_size=grid_size, image_path=before_path)
@@ -271,6 +276,7 @@ def run_agent(user_command: str, grid_size: int = 6, debug: bool = False) -> Non
         )
         
         print("  正在调用大模型进行视觉决策，请稍候...")
+        
         tool_call = call_llm_with_image_and_tools(
             prompt=react_prompt,
             image_path=image_path,
@@ -285,6 +291,7 @@ def run_agent(user_command: str, grid_size: int = 6, debug: bool = False) -> Non
         if active_skill:
             action = normalize_action(active_skill.enforce_action(action))
         action_type = str(action.get("action", ""))
+        
         print(f"\n  [{step_index}/{MAX_REACT_STEPS}] {format_action_brief(action)}")
 
         if action_type == "done":
@@ -344,6 +351,8 @@ def run_agent(user_command: str, grid_size: int = 6, debug: bool = False) -> Non
         # 如果是通用执行且执行成功，尝试固化为新技能
         if active_skill is None and finished:
             analyze_and_generate_skill(user_command, history_text)
+
+    return finished, image_path
 
 if __name__ == "__main__":
     run_agent("")
