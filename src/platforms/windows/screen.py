@@ -48,6 +48,30 @@ class ScreenCapture:
         lark_windows = []
         for hwnd, title in window_list:
             if "飞书" in title:
+                # 排除常见的浏览器误判（如“飞书云文档 - 夸克浏览器”）
+                if any(b in title for b in ["浏览器", "Chrome", "Edge", "夸克", "Firefox", "Safari"]):
+                    continue
+                    
+                # 增强过滤：确保进程可执行文件名为 Feishu.exe，排除浏览器网页或文件夹
+                try:
+                    _, pid = win32process.GetWindowThreadProcessId(hwnd)
+                    import psutil
+                    try:
+                        process_name = psutil.Process(pid).name()
+                        # 某些版本的飞书主进程可能叫 feishu.exe, Lark.exe 或者其他变体
+                        # 但如果是浏览器或常见非飞书进程，坚决过滤掉
+                        lower_name = process_name.lower()
+                        if any(b in lower_name for b in ["chrome", "msedge", "firefox", "quark", "explorer", "cmd"]):
+                            continue
+                        if lower_name not in ["feishu.exe", "lark.exe"]:
+                            # 不严格限制只能是 feishu.exe，因为在不同的安装环境下名字可能不同
+                            pass
+                    except (psutil.NoSuchProcess, psutil.AccessDenied, psutil.ZombieProcess):
+                        # 如果没有权限获取进程名，不要 continue 拦截，当作正常窗口处理
+                        pass
+                except Exception:
+                    pass
+                
                 # GetWindowRect 如果返回 (0,0,0,0) 说明这是一个纯后台服务窗口，不能用来截图
                 rect = win32gui.GetWindowRect(hwnd)
                 if rect[2] - rect[0] > 0 and rect[3] - rect[1] > 0:

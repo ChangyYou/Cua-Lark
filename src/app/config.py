@@ -14,9 +14,15 @@ load_dotenv()
 class Config:
     """Application configuration from environment variables."""
 
+    # LLM Provider (dashscope, openai)
+    llm_provider: str = os.getenv("LLM_PROVIDER", "dashscope").lower()
+
     # API Configuration
     dashscope_api_key: str = os.getenv("DASHSCOPE_API_KEY", "")
     dashscope_base_url: str = os.getenv("DASHSCOPE_BASE_URL", "")
+
+    openai_api_key: str = os.getenv("OPENAI_API_KEY", "")
+    openai_base_url: str = os.getenv("OPENAI_BASE_URL", "")
 
     # Model Configuration
     model_image: str = os.getenv("MODEL_IMAGE", "qwen3-vl-flash")

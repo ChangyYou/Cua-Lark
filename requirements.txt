@@ -1,5 +1,5 @@
-# Core dependencies
 dashscope>=1.25.0
+openai>=1.14.0
 mss>=9.0.1
 Pillow>=10.0.0
 PyAutoGUI>=0.9.54
@@ -11,6 +11,8 @@ pywin32>=305
 # Testing
 pytest>=7.0.0
 pytest-asyncio>=0.21.0
+pytest-html>=4.0.0
+PyYAML>=6.0
 
 # Development
 black>=23.0.0

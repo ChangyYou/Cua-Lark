@@ -49,8 +49,8 @@
    {{"action":"done","reason":"任务完成"}}
 
 规则：
-- 返回 JSON 数组，只包含动作对象，不要 Markdown，不要解释。
-- 每个对象只包含本步必要字段。
+- 返回严格的 JSON 数组，必须用 `[` 和 `]` 包裹。
+- 每个对象必须且只能包含当前动作的必要字段，**并且必须包含 `reason` 字段说明为什么执行该动作**。不要 Markdown，不要解释。
 - 计划总步数不超过 {max_plan_steps} 步。
 - 最后一步必须是 done。
 - 如果 active skill 存在，优先遵循该 skill 的 name/description/主内容。
