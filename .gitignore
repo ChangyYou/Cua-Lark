@@ -22,3 +22,5 @@ captures/
 
 # 技能配置文件（可能含敏感信息）
 skills/*/agents/*.yaml
+"node_modules/" 
+node_modules/
